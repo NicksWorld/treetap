@@ -1,0 +1,172 @@
+.Dd April 11, 2025
+.Dt TAP 5
+.Os
+.Sh NAME
+.Nm tap
+.Nd format of treetap package files
+.Sh DESCRIPTION
+The
+.Nm
+package format combines a
+.Nm ed25519
+signature for verification of trust, a
+.Nm tar
+archive containing package metadata and update scripts, and a
+.Nm tar
+archive containing the files to be installed.
+.Pp
+The format is designed primarily for distribution of software packages with
+the
+.Nm treetap
+package manager, initially developed for Maple Linux.
+.Sh General Format
+A
+.Nm
+package is made of four sequential segments:
+.Bl -enum
+.It
+A header describing the size and
+compression format used by the latter three segments
+.It
+An
+.Nm ed25519
+signature signing the remainder of the file
+.It
+A compressed
+.Nm tar
+archive containing implementation-defined metadata files
+.It
+A compressed
+.Nm tar
+archive containing files to be installed at the root directory of the system
+by the
+.Nm treetap
+package manager
+.El
+.Ss Tap Header
+The header structure for version 0 of the
+.Nm
+package format is as follows:
+.Bd -literal -offset indent
+struct ttap_header {
+  char[4] magic;
+  uint8_t version;
+  char[4] compression_format;
+  uint8_t signature_size;
+  uint64_t control_size;
+  uint64_t data_size;
+};
+.Ed
+.Bl -tag -width indent
+.It Va magic
+Contains the magic value
+.Dq tap\e0
+.It Va version
+This should be
+.Dq 0
+for the current version
+.It Va signature_size
+This is the length of the signature segment in bytes. The signature segment
+immediately follows this header
+.It Va compression_format
+This specifies the compression format that is used for the control and data
+archive segments of the file. Currently, the following are supported:
+.Bl -tag -width indent-two
+.It Dq gzip
+Signifies the
+.Nm gzip
+compression format
+.It Dq zstd
+Signifies the
+.Nm zstd
+compression format
+.It Dq lzma
+Signifies the
+.Nm lzma
+compression format
+.It Dq bz2\e0
+Signifies the
+.Nm bzip2
+compression format
+.It Dq none
+Signifies the lack of compression
+.El
+.It Va control_size , Va data_size
+The length in bytes of the control and data archive segments, which are stored
+sequentially following the signature.
+.El
+.Ss Signature Block
+The signature block immediately follows the header and has a size defined by the
+.Va signature_size
+value defined within.
+.Pp
+The signature stored within this block is an
+.Nm ed25519
+signature, signing the remainder of the file following the signature block.
+This is done to ensure that no decompression needs to be done in order to verify
+the trustworthiness of the
+.Nm
+package.
+.Pp
+This signature is to be generated with the
+.Fn crypto_sign_detached
+method provided by
+.Nm libsodium
+, applied to the remaining two sections at the end of the file.
+.Pp
+The representation of the signature is stored as follows:
+.Bd -literal -offset indent
+struct signature_block {
+  char fingerprint[];
+  char signature[];
+};
+.Ed
+.Bl -tag -width indent
+.It Va keyname
+A null-terminated ascii string containing the signing key's fingerprint,
+which can be used to fetch the matching public key from the system's trust store
+, which can be used to verify the signature.
+.It Va signature
+Raw binary data that comprises the remainder of the segment, containing the
+result of the signature calculation.
+.El
+.Ss Control Segment
+This segment consists of a potentially compressed
+.Nm tar
+archive which is to contain
+implementation-defined metadata about the package stored within the file.
+.Pp
+The tar file stored within the segment is compressed using the method described
+by
+.Va compression_format
+within the header, and contains PAX extended attributes.
+.Nm
+makes use of a specially named attribute
+.Dq TAP-SHA1
+which contains a
+.Nm SHA1
+hash of the entry's contents to assist in ensuring file integrity.
+.Pp
+There is no currently defined convention for what the section should contain,
+but there are a few general recommendations:
+.Bl -bullet -offset indent
+.It
+Package Metadata
+.It
+Install and uninstall hooks, for example rebuilding the fontconfig cache
+.It
+Changelog information
+.El
+.Ss Data Segment
+This segment consists of a potentially compressed
+.Nm tar
+archive which contains a file structure intended to be extracted at the root
+of a system's filesystem.
+.Pp
+The tar file stored within this segment is compressed using the method described
+by
+.Va compression_format
+within the header, and contains the same
+.Dq TAP-SHA1
+PAX extended attribute as described in
+.Sx Control Segment .
