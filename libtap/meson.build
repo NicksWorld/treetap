@@ -1,7 +1,8 @@
 libtap_sources = [
   'src/libtap.c',
   'src/buffer.c',
-  'src/filebuffer.c',
+  'src/buffer_file.c',
+  'src/buffer_memory.c',
 ]
 libtap_headers = [
   'include/libtap/libtap.h',

@@ -1,7 +1,8 @@
 tests = {
   # Placeholder test to ensure linkage
   'links': ['links.c'],
-  'tmpfile buffer': ['tmp_buffer.c'],
+  # Tests to ensure functional io buffer interfaces
+  'buffer io': ['buffer.c'],
 }
 
 foreach test_name, sources : tests

@@ -86,19 +86,12 @@ bool file_seek_cb(tap_buffer *buffer, void *userdata, long offset, int whence) {
 
 bool file_close_cb(tap_buffer *buffer, void *userdata) {
   FILE *file = userdata;
-  for (;;) {
-    int res = fclose(file);
-    if (res == 0)
-      return true;
+  int res = fclose(file);
+  if (res == 0)
+    return true;
 
-    if (errno == EINTR) {
-      clearerr(file);
-      continue;
-    }
-
-    tap_buffer_set_fatal(buffer);
-    return false;
-  }
+  tap_buffer_set_fatal(buffer);
+  return false;
 }
 
 LIBTAP_EXPORT tap_buffer *tap_buffer_file(FILE *file) {

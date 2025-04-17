@@ -91,7 +91,14 @@ bool tap_buffer_fatal(tap_buffer *buffer);
 /**
  * Pre-implemented buffer storages
  */
+// Creates a buffer backed by a temporary file
 tap_buffer *tap_buffer_tmpfile(void);
+// Creates a buffer backed by a normal file
 tap_buffer *tap_buffer_file(FILE *);
+// Creates a buffer backed by a resizing block of memory.
+tap_buffer *tap_buffer_dynamic_memory(size_t initial_capacity);
+// Creates a buffer backed by a user-provided allocated block with a max size
+// of `capacity`. The backing storage is not deallocated by the buffer.
+tap_buffer *tap_buffer_static_memory(char *buffer, size_t capacity);
 
 #endif
