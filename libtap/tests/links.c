@@ -1,4 +1,4 @@
-#include <libtap.h>
+#include <libtap/libtap.h>
 
 #include <assert.h>
 
