@@ -8,77 +8,42 @@
 #include "export.h"
 
 typedef struct memory_buffer {
-  // Position of head in buffer
-  size_t position;
-  // Size of written data
-  size_t size;
-  // Maximum capacity of buffer
-  size_t capacity;
-  // Whether this interface owns the buffer,
-  // if false, the buffer cannot be resized or deallocated.
-  bool owned;
-  // Buffer storing the data
-  char *buffer;
+  size_t head;     // Read/write head
+  size_t size;     // Size of contained data
+  size_t capacity; // Maximum capacity of buffer
+  bool dynamic;    // Whether this buffer can by realloced
+  char *buffer;    // Stored data
 } memory_buffer;
 
-memory_buffer *dyn_mem_buffer_new(size_t initial_capacity) {
-  memory_buffer *buff = calloc(1, sizeof(memory_buffer));
-  if (!buff) {
-    return NULL;
-  }
-  buff->buffer = malloc(initial_capacity);
-  if (!buff->buffer) {
-    free(buff);
-    return NULL;
-  }
-  buff->capacity = initial_capacity;
-  buff->owned = true;
-  return buff;
-}
+static size_t mem_read_cb(tap_buffer *buffer, char *dst, size_t capacity) {
+  memory_buffer *buff = buffer->userdata;
 
-memory_buffer *static_mem_buffer_new(char *buffer, size_t capacity) {
-  memory_buffer *buff = calloc(1, sizeof(memory_buffer));
-  if (!buff) {
-    return NULL;
-  }
-  buff->buffer = buffer;
-  buff->capacity = capacity;
-  buff->owned = false;
-  return buff;
-}
-
-static size_t mem_read_cb(tap_buffer *buffer, void *userdata, char *dst,
-                          size_t capacity) {
-  (void)buffer; /* UNUSED */
-  memory_buffer *buff = userdata;
-
-  size_t remaining_bytes = buff->size - buff->position;
+  size_t remaining_bytes = buff->size - buff->head;
   size_t read_bytes = capacity < remaining_bytes ? capacity : remaining_bytes;
   if (read_bytes == 0) {
     return 0;
   }
 
-  memcpy(dst, buff->buffer + buff->position, read_bytes);
-  buff->position += read_bytes;
+  memcpy(dst, buff->buffer + buff->head, read_bytes);
+  buff->head += read_bytes;
 
   return read_bytes;
 }
 
-static size_t mem_write_cb(tap_buffer *buffer, void *userdata, char *src,
-                           size_t length) {
-  memory_buffer *buff = userdata;
+static size_t mem_write_cb(tap_buffer *buffer, char *src, size_t length) {
+  memory_buffer *buff = buffer->userdata;
 
-  size_t remaining_alloced = buff->capacity - buff->position;
+  size_t remaining_alloced = buff->capacity - buff->head;
   if (remaining_alloced < length) {
-    if (buff->owned) {
+    if (buff->dynamic) {
       size_t target_size = buff->capacity != 0 ? buff->capacity : 2;
-      while (target_size < buff->position + length) {
+      while (target_size < buff->head + length) {
         target_size *= 2;
       }
 
       char *replacement_buffer = realloc(buff->buffer, target_size);
       if (!replacement_buffer) {
-        tap_buffer_set_fatal(buffer);
+        buffer->fatal = true;
         return 0;
       }
       buff->buffer = replacement_buffer;
@@ -89,16 +54,15 @@ static size_t mem_write_cb(tap_buffer *buffer, void *userdata, char *src,
     }
   }
 
-  memcpy(buff->buffer + buff->position, src, length);
-  buff->position += length;
-  buff->size = buff->size > buff->position ? buff->size : buff->position;
+  memcpy(buff->buffer + buff->head, src, length);
+  buff->head += length;
+  buff->size = buff->size > buff->head ? buff->size : buff->head;
 
   return length;
 }
 
-static bool mem_seek_cb(tap_buffer *buffer, void *userdata, long offset,
-                        int whence) {
-  memory_buffer *buff = userdata;
+static bool mem_seek_cb(tap_buffer *buffer, long offset, int whence) {
+  memory_buffer *buff = buffer->userdata;
 
   long target_pos;
   switch (whence) {
@@ -106,61 +70,79 @@ static bool mem_seek_cb(tap_buffer *buffer, void *userdata, long offset,
     target_pos = offset;
     break;
   case SEEK_CUR:
-    target_pos = (long)buff->position + offset;
+    target_pos = (long)buff->head + offset;
     break;
   case SEEK_END:
     target_pos = (long)buff->size + offset;
     break;
   default:
-    tap_buffer_set_fatal(buffer);
+    buffer->fatal = true;
     return false;
   }
 
-  if (target_pos < 0 || target_pos > (long)buff->position) {
-    tap_buffer_set_fatal(buffer);
+  if (target_pos < 0 || target_pos > (long)buff->head) {
+    buffer->fatal = true;
     return false;
   }
-  buff->position = target_pos;
+  buff->head = target_pos;
 
   return true;
 }
 
-static bool mem_close_cb(tap_buffer *buffer, void *userdata) {
-  (void)buffer; /* UNUSED */
-  memory_buffer *buff = userdata;
+static bool mem_close_cb(tap_buffer *buffer) {
+  memory_buffer *buff = buffer->userdata;
 
-  if (buff->owned) {
+  if (buff->dynamic) {
     free(buff->buffer);
   }
   free(buff);
   return true;
 }
 
-static tap_buffer *tap_buffer_memory_init(memory_buffer *mem_buffer) {
-  tap_buffer *buffer = tap_buffer_new(mem_buffer);
-  if (!buffer) {
-    return NULL;
-  }
-  tap_buffer_set_read(buffer, mem_read_cb);
-  tap_buffer_set_write(buffer, mem_write_cb);
-  tap_buffer_set_seek(buffer, mem_seek_cb);
-  tap_buffer_set_close(buffer, mem_close_cb);
-  return buffer;
+static void set_memory_callbacks(tap_buffer *buffer) {
+  buffer->read = mem_read_cb;
+  buffer->write = mem_write_cb;
+  buffer->seek = mem_seek_cb;
+  buffer->close = mem_close_cb;
 }
 
-LIBTAP_EXPORT tap_buffer *tap_buffer_dynamic_memory(size_t initial_capacity) {
-  memory_buffer *buff = dyn_mem_buffer_new(initial_capacity);
+LIBTAP_EXPORT void tap_buffer_memory(tap_buffer *buffer,
+                                     size_t initial_capacity) {
+  memory_buffer *buff = calloc(1, sizeof(memory_buffer));
   if (!buff) {
-    return NULL;
+    buffer->fatal = true;
+    return;
   }
-  return tap_buffer_memory_init(buff);
+  buff->buffer = malloc(initial_capacity);
+  if (!buff->buffer) {
+    buffer->fatal = true;
+    return;
+  }
+  buff->dynamic = true;
+  buff->capacity = initial_capacity;
+  buffer->userdata = buff;
+  set_memory_callbacks(buffer);
 }
 
-LIBTAP_EXPORT tap_buffer *tap_buffer_static_memory(char *buffer,
-                                                   size_t capacity) {
-  memory_buffer *buf = static_mem_buffer_new(buffer, capacity);
-  if (!buf) {
-    return NULL;
+LIBTAP_EXPORT void tap_buffer_memory_static(tap_buffer *buffer,
+                                            char *user_storage, size_t size,
+                                            size_t capacity) {
+  memory_buffer *buff = calloc(1, sizeof(memory_buffer));
+  if (!buff) {
+    buffer->fatal = true;
+    return;
   }
-  return tap_buffer_memory_init(buf);
+  buff->buffer = user_storage;
+  buff->size = size;
+  buff->capacity = capacity;
+  buffer->userdata = buff;
+  set_memory_callbacks(buffer);
+}
+
+LIBTAP_EXPORT char* tap_buffer_memory_get(tap_buffer *buffer, size_t *size) {
+  memory_buffer *buff = buffer->userdata;
+  if (size) {
+    *size = buff->size;
+  }
+  return buff->buffer;
 }

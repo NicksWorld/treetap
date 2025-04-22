@@ -7,9 +7,9 @@
 
 #include "export.h"
 
-size_t file_read_cb(tap_buffer *buffer, void *userdata, char *dst,
+LIBTAP_EXPORT size_t tap_buffer_file_read_cb(tap_buffer *buffer, char *dst,
                     size_t capacity) {
-  FILE *file = userdata;
+  FILE *file = buffer->userdata;
 
   size_t read = 0;
   while (read < capacity) {
@@ -25,7 +25,7 @@ size_t file_read_cb(tap_buffer *buffer, void *userdata, char *dst,
         clearerr(file);
         continue;
       }
-      tap_buffer_set_fatal(buffer);
+      buffer->fatal = true;
       return 0;
     }
 
@@ -37,9 +37,9 @@ size_t file_read_cb(tap_buffer *buffer, void *userdata, char *dst,
   return read;
 }
 
-size_t file_write_cb(tap_buffer *buffer, void *userdata, char *src,
+LIBTAP_EXPORT size_t tap_buffer_file_write_cb(tap_buffer *buffer, char *src,
                      size_t length) {
-  FILE *file = userdata;
+  FILE *file = buffer->userdata;
 
   size_t written = 0;
   while (written < length) {
@@ -53,7 +53,7 @@ size_t file_write_cb(tap_buffer *buffer, void *userdata, char *src,
           clearerr(file);
           continue;
         }
-        tap_buffer_set_fatal(buffer);
+        buffer->fatal = true;
         return 0;
       }
 
@@ -66,8 +66,8 @@ size_t file_write_cb(tap_buffer *buffer, void *userdata, char *src,
   return written;
 }
 
-bool file_seek_cb(tap_buffer *buffer, void *userdata, long offset, int whence) {
-  FILE *file = userdata;
+LIBTAP_EXPORT bool tap_buffer_file_seek_cb(tap_buffer *buffer, long offset, int whence) {
+  FILE *file = buffer->userdata;
 
   for (;;) {
     int res = fseek(file, offset, whence);
@@ -79,35 +79,24 @@ bool file_seek_cb(tap_buffer *buffer, void *userdata, long offset, int whence) {
       continue;
     }
 
-    tap_buffer_set_fatal(buffer);
+    buffer->fatal = true;
     return false;
   }
 }
 
-bool file_close_cb(tap_buffer *buffer, void *userdata) {
-  FILE *file = userdata;
+LIBTAP_EXPORT bool tap_buffer_file_close_cb(tap_buffer *buffer) {
+  FILE *file = buffer->userdata;
   int res = fclose(file);
   if (res == 0)
     return true;
 
-  tap_buffer_set_fatal(buffer);
+  buffer->fatal = true;
   return false;
 }
 
-LIBTAP_EXPORT tap_buffer *tap_buffer_file(FILE *file) {
-  tap_buffer *buffer = tap_buffer_new(file);
-  tap_buffer_set_read(buffer, file_read_cb);
-  tap_buffer_set_write(buffer, file_write_cb);
-  tap_buffer_set_seek(buffer, file_seek_cb);
-  tap_buffer_set_close(buffer, file_close_cb);
-
-  return buffer;
-}
-
-LIBTAP_EXPORT tap_buffer *tap_buffer_tmpfile(void) {
-  FILE *file = tmpfile();
-  if (!file) {
-    return NULL;
-  }
-  return tap_buffer_file(file);
+LIBTAP_EXPORT void tap_buffer_file(tap_buffer* buffer) {
+  buffer->read = tap_buffer_file_read_cb;
+  buffer->write = tap_buffer_file_write_cb;
+  buffer->seek = tap_buffer_file_seek_cb;
+  buffer->close =  tap_buffer_file_close_cb;
 }

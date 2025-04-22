@@ -3,7 +3,7 @@ project('treetap', 'c',
   license: 'ISC',
   default_options: [
     'warning_level=3',
-    'c_std=c99',
+    'c_std=c23',
   ],
   meson_version: '>= 1.1',
 )

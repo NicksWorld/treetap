@@ -1,6 +1,5 @@
 libtap_sources = [
   'src/libtap.c',
-  'src/buffer.c',
   'src/buffer_file.c',
   'src/buffer_memory.c',
 ]
