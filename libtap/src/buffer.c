@@ -83,3 +83,25 @@ LIBTAP_EXPORT bool tap_buffer_close(tap_buffer *buffer) {
   }
   return buffer->close(buffer, buffer->userdata);
 }
+
+LIBTAP_EXPORT tap_error tap_buffer_copy(tap_buffer *dst, tap_buffer *src,
+                                        size_t *copied) {
+  char readbuf[1024];
+  for (;;) {
+    size_t read = tap_buffer_read(src, readbuf, 1024);
+    if (read != 0) {
+      size_t written = tap_buffer_write(dst, readbuf, read);
+      if (copied) {
+        *copied += written;
+      }
+      if (written != read) {
+        return TAP_ERR_IO;
+      }
+      continue;
+    }
+
+    if (tap_buffer_fatal(src) || tap_buffer_fatal(dst)) {
+      return TAP_ERR_IO;
+    }
+  }
+}

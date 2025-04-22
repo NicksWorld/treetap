@@ -8,7 +8,7 @@
 The
 .Nm
 package format combines a
-.Nm ed25519
+.Nm ed25519ph
 signature for verification of trust, a
 .Nm tar
 archive containing package metadata and update scripts, and a
@@ -29,7 +29,7 @@ A header describing the size and
 compression format used by the latter three segments
 .It
 An
-.Nm ed25519
+.Nm ed25519ph
 signature signing the remainder of the file
 .It
 A compressed
@@ -101,7 +101,7 @@ The signature block immediately follows the header and has a size defined by the
 value defined within.
 .Pp
 The signature stored within this block is an
-.Nm ed25519
+.Nm ed25519ph
 signature, signing the remainder of the file following the signature block.
 This is done to ensure that no decompression needs to be done in order to verify
 the trustworthiness of the

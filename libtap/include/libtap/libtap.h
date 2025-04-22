@@ -89,16 +89,47 @@ void tap_buffer_set_fatal(tap_buffer *buffer);
 bool tap_buffer_fatal(tap_buffer *buffer);
 
 /**
+ * Copy remainder of one buffer into another
+ */
+tap_error tap_buffer_copy(tap_buffer *dst, tap_buffer *src, size_t *copied);
+
+/**
  * Pre-implemented buffer storages
  */
 // Creates a buffer backed by a temporary file
 tap_buffer *tap_buffer_tmpfile(void);
 // Creates a buffer backed by a normal file
-tap_buffer *tap_buffer_file(FILE *);
+tap_buffer *tap_buffer_file(FILE *file);
 // Creates a buffer backed by a resizing block of memory.
 tap_buffer *tap_buffer_dynamic_memory(size_t initial_capacity);
 // Creates a buffer backed by a user-provided allocated block with a max size
 // of `capacity`. The backing storage is not deallocated by the buffer.
 tap_buffer *tap_buffer_static_memory(char *buffer, size_t capacity);
+
+/**
+ * Signing Functionality
+ *
+ * Public key is crypto_sign_PUBLICKEYBYTES long (from sodium.h)
+ * Secret key is crypto_sign_SECRETKEYBYTES long (from sodium.h)
+ */
+typedef struct tap_keypair tap_keypair;
+// Load a keypair from the provided values
+tap_keypair *tap_keypair_new(unsigned char *public_key,
+                             unsigned char *secret_key);
+// Generate a new keypair
+tap_keypair *tap_keypair_generate(void);
+
+void tap_keypair_free(tap_keypair *keypair);
+
+// Retrieve the raw byte representation of the keys
+void tap_keypair_public(tap_keypair *keypair, unsigned char *out_pk);
+void tap_keypair_secret(tap_keypair *keypair, unsigned char *out_sk);
+
+/**
+ * Package Assembly
+ */
+tap_error tap_package_write(tap_buffer *out, tap_keypair *keypair,
+                       tap_compression_format compression, tap_buffer *control,
+                       tap_buffer *data);
 
 #endif
