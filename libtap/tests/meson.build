@@ -1,9 +1,4 @@
-tests = {
-  # Placeholder test to ensure linkage
-  'links': ['links.c'],
-  # Tests to ensure functional io buffer interfaces
-  'buffer io': ['buffer.c'],
-}
+tests = {}
 
 foreach test_name, sources : tests
   exe = executable(test_name, sources, dependencies: [libtap_dep])

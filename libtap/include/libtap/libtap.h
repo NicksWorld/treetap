@@ -1,92 +1,66 @@
 #ifndef LIBTAP_LIBTAP_H
 #define LIBTAP_LIBTAP_H
 
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdio.h>
+#include <stdint.h>
 
-int tap_version(void);
+#define TAP_VERSION 1
 
-typedef enum tap_error {
-  TAP_ERR_OK,
-  TAP_ERR_PARAM,
-  TAP_ERR_ALLOC,
-  TAP_ERR_IO,
-  TAP_ERR_UNSUPPORTED,
-} tap_error;
+typedef enum {
+  TAP_ARCH_NEUTRAL = 0,
+  TAP_ARCH_AMD64
+} tap_architecture_t;
 
-typedef enum tap_compression_format {
+typedef enum {
+  TAP_COMPRESS_NONE = 0,
   TAP_COMPRESS_GZIP,
-  TAP_COMPRESS_ZSTD,
-  TAP_COMPRESS_LZMA,
   TAP_COMPRESS_BZIP2,
-  TAP_COMPRESS_NONE,
-} tap_compression_format;
+  TAP_COMPRESS_XZ
+} tap_compression_t;
 
-typedef struct tap_buffer tap_buffer;
-/**
- * Read bytes from a buffer.
- *
- * Reads `capacity` bytes into dst, returning the number read.
- * The return value will differ from `capacity` if EOF or an error occurs.
- */
-typedef size_t tap_buffer_read_cb(tap_buffer *buffer, char *dst,
-                                  size_t capacity);
-/**
- * Writes bytes to a buffer.
- *
- * Writes `length` bytes into the buffer, returning the number written.
- * The return value will differ from `length` if EOF or an error occurs.
- */
-typedef size_t tap_buffer_write_cb(tap_buffer *buffer, char *src,
-                                   size_t length);
-/**
- * Seeks to a position in the buffer.
- *
- * Attempts to seek to the specified file location. Offset is the position
- * relative to whence, which is the same values as used in fseek.
- */
-typedef bool tap_buffer_seek_cb(tap_buffer *buffer, long offset, int whence);
-/**
- * Closes and/or frees the backing buffer storage.
- */
-typedef bool tap_buffer_close_cb(tap_buffer *buffer);
+typedef enum {
+  // Everyone is okay! ...including me. ~ahill
+  TAP_ERROR_OK = 0
+} tap_error_t;
 
-struct tap_buffer {
-  void *userdata;
-
-  // Methods for operating upon the userdata
-  tap_buffer_read_cb *read;
-  tap_buffer_write_cb *write;
-  tap_buffer_seek_cb *seek;
-  tap_buffer_close_cb *close;
-
-  // Set upon a fatal error
-  bool fatal;
-};
-
-/**
- * Pre-implemented buffer storages
- */
-// Helper method to set the buffer_file callbacks
-void tap_buffer_file(tap_buffer *buffer);
-
-size_t tap_buffer_file_read_cb(tap_buffer *buffer, char *dst, size_t capacity);
-size_t tap_buffer_file_write_cb(tap_buffer *buffer, char *src, size_t length);
-bool tap_buffer_file_seek_cb(tap_buffer *buffer, long offset, int whence);
-bool tap_buffer_file_close_cb(tap_buffer *buffer);
-
-// Creates a buffer backed by a resizing block of memory. Closing the buffer
-// deallocates the memory.
-void tap_buffer_memory(tap_buffer* buffer, size_t initial_capacity);
-// Get a reference to a memory buffer's contents.
-// Performing io operations on the underlying buffer will invalidate the pointer.
-char* tap_buffer_memory_get(tap_buffer* buffer, size_t *size);
-
-// Creates a buffer backed by a user-provided allocated block, containing `size`
-// written bytes, and a maximum capacity of `capacity`.
-// The user_storage buffer is not freed upon buffer closure, and must be done
-// by the user.
-void tap_buffer_memory_static(tap_buffer* buffer, char *user_storage, size_t size, size_t capacity);
+typedef struct __attribute__((__packed__)) {
+  // Must always be "mapl\x9A"
+  uint8_t magic[5];
+  // Must always be equal to TAP_VERSION
+  uint8_t format;
+  // Must be zero
+  uint16_t padding;
+  // Must be the ed25519 signature of the remaining file
+  // FIXME: What is the best way to include a static assertion to compare our 64
+  //        bytes to crypto_sign_BYTES. ~ahill
+  uint8_t signature[64];
+  // Must be the XXH64 hash of the public ed25519 key the package was signed with
+  uint64_t signature_hash;
+  // Must be the current version, where the newer versions will always have a
+  // larger number than the previous versions.
+  uint64_t version;
+  // Should be zero in most cases. Used to artifically increase version (package
+  // revisions, etc.).
+  uint8_t epoch;
+  // Must be a value that can be mapped to tap_architecture_t
+  uint8_t architecture;
+  // Must be a value that can be mapped to tap_compression_t
+  uint8_t compression;
+  // Must be zero
+  uint8_t reserved[6];
+  // The offset of the compressed archive from the beginning of the file in bytes
+  uint64_t data_offset;
+  // The length of the compressed archive in bytes
+  uint64_t data_length;
+  /* To be considered/implemented:
+    - Package Name
+    - Version String
+    - Summary
+    - Upstream URL
+    - License
+    - Maintainer(s)
+    - Runtime Dependencies
+    - Build Dependencies
+  */
+} tap_header_t;
 
 #endif

@@ -1,7 +1,5 @@
 libtap_sources = [
   'src/libtap.c',
-  'src/buffer_file.c',
-  'src/buffer_memory.c',
 ]
 libtap_headers = [
   'include/libtap/libtap.h',
@@ -10,8 +8,8 @@ libtap_manpages = [
   'man/tap.5',
 ]
 
-libarchive_dep = dependency('libarchive')
 libsodium_dep = dependency('libsodium')
+xxhash_dep = dependency('libxxhash')
 
 libtap_include = include_directories('include')
 libtap = shared_library(
@@ -20,7 +18,7 @@ libtap = shared_library(
   include_directories: libtap_include,
   gnu_symbol_visibility: 'hidden',
   install: true,
-  #  dependencies: [libarchive_dep, libsodium_dep],
+  dependencies: [libsodium_dep, xxhash_dep],
 )
 libtap_dep = declare_dependency(
   link_with: libtap,
